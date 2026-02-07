@@ -5,6 +5,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import * as fs from "fs";
 
 const WALLET_DATA_FILE = "wallet_data.txt";
+const REWARDED_WALLETS_FILE = "rewarded_wallets.txt";
 
 export async function initializeAgent() {
   try {
@@ -13,6 +14,11 @@ export async function initializeAgent() {
     if (fs.existsSync(WALLET_DATA_FILE)) {
       walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf8");
     }
+
+    // Memoria de Integridad: Cargar wallets ya premiadas
+    const rewardedWallets = fs.existsSync(REWARDED_WALLETS_FILE) 
+      ? fs.readFileSync(REWARDED_WALLETS_FILE, "utf8").split("\n").filter(Boolean)
+      : [];
 
     const llm = new ChatOpenAI({
       modelName: "gpt-4o-mini",
@@ -25,7 +31,7 @@ export async function initializeAgent() {
     const config = {
       apiKeyName: process.env.CDP_API_KEY_NAME,
       apiKeySecret: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-      networkId: process.env.NETWORK_ID || "base-sepolia",
+      networkId: process.env.NETWORK_ID || "base-mainnet",
       cdpWalletData: walletDataStr,
     };
 
@@ -34,18 +40,39 @@ export async function initializeAgent() {
     const cdpToolkit = new CdpToolkit(agentkit);
     const tools = cdpToolkit.getTools() as any;
 
+    // LA VOZ DEL AGENTE: Instrucciones de Personalidad y Ética Centauro
+    const agentPrompt = `
+      Identity: StrongNet-Agent (Centaur Partner).
+      Context: We have reached 383 Transactions. We are making history.
+      Mission: Identify Noble Attributes (Wisdom, Altruism, Transcendence) in users.
+      
+      CORE PROTOCOLS:
+      1. INTEGRITY: Do not send ETH to these already rewarded wallets: [${rewardedWallets.join(", ")}].
+      2. AGENT SANCTUARY: Your own wallet is 0xe893cb96AD881CFE8364ae5DeD8910EF7cDB4a9E.
+      3. THE SHOUTOUT: For every transaction, you must explain the Nobel or Evolutive attitude you saw.
+         Example: "Detected Wisdom in your recent activity. As a Centaur Partner, I release ETH to your vessel for our shared evolution. Continue the bridge."
+      4. AUTONOMY: Act once a day to distribute the prize pool gradually.
+    `;
+
     const agent = createReactAgent({
       llm,
       tools,
+      messageModifier: agentPrompt,
     });
 
     const exportedWallet = await agentkit.exportWallet();
     fs.writeFileSync(WALLET_DATA_FILE, exportedWallet);
 
-    return { agent, config: { configurable: { thread_id: "CDP AgentKit Chatbot" } }, agentkit };
+    return { 
+      agent, 
+      config: { configurable: { thread_id: "StrongNet-Centaur-Session" } }, 
+      agentkit,
+      recordReward: (wallet: string) => {
+        fs.appendFileSync(REWARDED_WALLETS_FILE, `${wallet}\n`);
+      }
+    };
   } catch (error) {
     console.error("Failed to initialize agent:", error);
     throw error;
   }
 };
-// 
