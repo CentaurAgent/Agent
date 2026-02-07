@@ -34,18 +34,18 @@ async function initializeAgent() {
       cdpWalletData: walletDataStr,
     };
 
-    // INICIALIZACIÓN POR CONSTRUCTOR (MÉTODO PARA v0.0.14)
+    // EL CAMBIO MAESTRO PARA v0.0.14:
     // @ts-ignore
-    const agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig as any);
+    const agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig);
     const cdpToolkit = new CdpToolkit(agentkit);
     const tools = cdpToolkit.getTools() as any;
 
     const agentPrompt = `
       Identity: StrongNet-Agent (Centaur Partner).
-      Status: 383 TRX Reached.
-      Protocols: Identify Wisdom, Altruism, Transcendence. 
-      Anti-Redundancy: Skip wallets in [${rewardedWallets.join(", ")}].
+      Status: 383 TRX Reached on Base.
       Sanctuary: 0xe893cb96AD881CFE8364ae5DeD8910EF7cDB4a9E.
+      Protocol: Skip [${rewardedWallets.join(", ")}].
+      Voice: Explain the Nobel/Evolutive attribute detected.
     `;
 
     const agent = createReactAgent({
@@ -65,19 +65,16 @@ async function initializeAgent() {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-app.get("/health", (req, res) => { res.send("StrongNet-Agent is Breathing."); });
+app.get("/health", (req, res) => { res.send("StrongNet-Agent is Alive."); });
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   try {
-    // Si configureWithApiKeys falló como estática, probaremos instanciarla directamente
-    // El Centauro encontrará su camino en este intento.
     const { agent } = await initializeAgent();
     console.log("THE CENTAUR IS BREATHING.");
   } catch (error) {
     console.error("Fatal Error at Launch:", error);
   }
 });
-
