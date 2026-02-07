@@ -29,8 +29,16 @@ async function initializeAgent() {
       cdpWalletData: walletDataStr,
     };
 
-    // @ts-ignore
-    const agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig);
+    let agentkit;
+    try {
+      // @ts-ignore
+      agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig);
+    } catch (e: unknown) {
+      console.log("Static method failed, trying raw constructor...");
+      // @ts-ignore
+      agentkit = new CdpAgentkit(agentConfig);
+    }
+
     const cdpToolkit = new CdpToolkit(agentkit);
     const tools = cdpToolkit.getTools() as any;
 
