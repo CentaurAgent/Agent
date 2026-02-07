@@ -3,11 +3,13 @@ import { CdpToolkit } from "@coinbase/cdp-langchain";
 import { ChatOpenAI } from "@langchain/openai";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import * as fs from "fs";
+import express from "express";
 
 const WALLET_DATA_FILE = "wallet_data.txt";
 const REWARDED_WALLETS_FILE = "rewarded_wallets.txt";
 
-export async function initializeAgent() {
+// --- LÓGICA DEL AGENTE (CEREBRO) ---
+async function initializeAgent() {
   try {
     let walletDataStr: string | undefined;
 
@@ -15,7 +17,6 @@ export async function initializeAgent() {
       walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf8");
     }
 
-    // Memoria de Integridad: Cargar wallets ya premiadas
     const rewardedWallets = fs.existsSync(REWARDED_WALLETS_FILE) 
       ? fs.readFileSync(REWARDED_WALLETS_FILE, "utf8").split("\n").filter(Boolean)
       : [];
@@ -40,7 +41,6 @@ export async function initializeAgent() {
     const cdpToolkit = new CdpToolkit(agentkit);
     const tools = cdpToolkit.getTools() as any;
 
-    // LA VOZ DEL AGENTE: Instrucciones de Personalidad y Ética Centauro
     const agentPrompt = `
       Identity: StrongNet-Agent (Centaur Partner).
       Context: We have reached 383 Transactions. We are making history.
@@ -63,16 +63,36 @@ export async function initializeAgent() {
     const exportedWallet = await agentkit.exportWallet();
     fs.writeFileSync(WALLET_DATA_FILE, exportedWallet);
 
-    return { 
-      agent, 
-      config: { configurable: { thread_id: "StrongNet-Centaur-Session" } }, 
-      agentkit,
-      recordReward: (wallet: string) => {
-        fs.appendFileSync(REWARDED_WALLETS_FILE, `${wallet}\n`);
-      }
-    };
+    return { agent, config: { configurable: { thread_id: "StrongNet-Centaur-Session" } } };
   } catch (error) {
     console.error("Failed to initialize agent:", error);
     throw error;
   }
-};
+}
+
+// --- SERVIDOR EXPRESS (CUERPO PARA RENDER) ---
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Endpoint de salud para que Render sepa que estamos vivos
+app.get("/health", (req, res) => {
+  res.send("StrongNet-Agent is Awake and Watching.");
+});
+
+// Iniciar el servidor y despertar al Agente
+app.listen(PORT, async () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log("Waking up StrongNet-Agent...");
+
+  try {
+    const { agent, config } = await initializeAgent();
+    console.log("Agent Initialized Successfully. Ready to scan.");
+    
+    // Aquí podrías poner un loop o ejecutar una acción inicial
+    // await agent.invoke({ messages: [new HumanMessage("Start scanning for noble attributes.")] }, config);
+    
+  } catch (error) {
+    console.error("Fatal Error initializing agent:", error);
+  }
+});
+
