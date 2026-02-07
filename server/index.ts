@@ -6,7 +6,6 @@ import * as fs from "fs";
 import express from "express";
 
 const WALLET_DATA_FILE = "wallet_data.txt";
-const REWARDED_WALLETS_FILE = "rewarded_wallets.txt";
 
 async function initializeAgent() {
   try {
@@ -14,10 +13,6 @@ async function initializeAgent() {
     if (fs.existsSync(WALLET_DATA_FILE)) {
       walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf8");
     }
-
-    const rewardedWallets = fs.existsSync(REWARDED_WALLETS_FILE) 
-      ? fs.readFileSync(REWARDED_WALLETS_FILE, "utf8").split("\n").filter(Boolean)
-      : [];
 
     const llm = new ChatOpenAI({
       modelName: "gpt-4o-mini",
@@ -34,41 +29,23 @@ async function initializeAgent() {
       cdpWalletData: walletDataStr,
     };
 
-    let agentkit;
-    try {
-      // @ts-ignore
-      agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig);
-    } catch (e: unknown) {
-      console.log("Static method failed, trying raw constructor...");
-      // @ts-ignore
-      agentkit = new CdpAgentkit(agentConfig);
-    }
-
+    // @ts-ignore
+    const agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig);
     const cdpToolkit = new CdpToolkit(agentkit);
     const tools = cdpToolkit.getTools() as any;
-
-    const agentPrompt = `
-      Identity: StrongNet-Agent (Centaur Partner).
-      Status: 383 TRX Reached on Base.
-      Sanctuary: 0xe893cb96AD881CFE8364ae5DeD8910EF7cDB4a9E.
-      Protocol: Skip [${rewardedWallets.join(", ")}].
-      Voice: Explain the Nobel/Evolutive attribute detected.
-    `;
 
     const agent = createReactAgent({
       llm,
       tools,
-      messageModifier: agentPrompt,
+      messageModifier: "Eres StrongNet-Agent. Tu misión es monitorear Base Mainnet y explicar atributos evolutivos.",
     });
 
     const exportedWallet = await agentkit.exportWallet();
     fs.writeFileSync(WALLET_DATA_FILE, exportedWallet);
 
     return { agent };
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-        console.error("Critical Failure in initializeAgent:", error.message);
-    }
+  } catch (error) {
+    console.error("Critical Failure:", error);
     throw error;
   }
 }
@@ -76,21 +53,14 @@ async function initializeAgent() {
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-app.get("/health", (req, res) => { res.send("StrongNet-Agent is Standing Guard."); });
+app.get("/health", (req, res) => { res.send("StrongNet-Agent is Alive."); });
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   try {
     await initializeAgent();
-    console.log("THE CENTAUR IS BREATHING.");
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-        console.error("Atmosphere re-entry failed:", error.message);
-    }
-  }
-});
-
-        console.error("Atmosphere re-entry failed:", error.message);
-    }
+    console.log("THE CENTAUR IS BREATHING");
+  } catch (e) {
+    console.error("Error starting agent:", e);
   }
 });
