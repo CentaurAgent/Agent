@@ -34,7 +34,7 @@ async function initializeAgent() {
       cdpWalletData: walletDataStr,
     };
 
-    // EL CAMBIO MAESTRO PARA v0.0.14:
+    // --- LA LLAVE MAESTRA: LLAMADA ASÍNCRONA CORRECTA ---
     // @ts-ignore
     const agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig);
     const cdpToolkit = new CdpToolkit(agentkit);
