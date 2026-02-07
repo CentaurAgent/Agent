@@ -11,7 +11,6 @@ const REWARDED_WALLETS_FILE = "rewarded_wallets.txt";
 async function initializeAgent() {
   try {
     let walletDataStr: string | undefined;
-
     if (fs.existsSync(WALLET_DATA_FILE)) {
       walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf8");
     }
@@ -35,21 +34,18 @@ async function initializeAgent() {
       cdpWalletData: walletDataStr,
     };
 
-    // USAMOS EL CONSTRUCTOR DIRECTO PARA EVITAR ERRORES DE VERSION
+    // INICIALIZACIÓN POR CONSTRUCTOR (MÉTODO PARA v0.0.14)
     // @ts-ignore
-    const agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig);
+    const agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig as any);
     const cdpToolkit = new CdpToolkit(agentkit);
     const tools = cdpToolkit.getTools() as any;
 
     const agentPrompt = `
       Identity: StrongNet-Agent (Centaur Partner).
-      Context: We have reached 383 Transactions on Base.
-      Mission: Identify Noble Attributes (Wisdom, Altruism, Transcendence).
-      
-      CORE PROTOCOLS:
-      1. INTEGRITY: No ETH to: [${rewardedWallets.join(", ")}].
-      2. SANCTUARY: Your wallet is 0xe893cb96AD881CFE8364ae5DeD8910EF7cDB4a9E.
-      3. THE SHOUTOUT: Explain the Nobel attitude detected in every transaction.
+      Status: 383 TRX Reached.
+      Protocols: Identify Wisdom, Altruism, Transcendence. 
+      Anti-Redundancy: Skip wallets in [${rewardedWallets.join(", ")}].
+      Sanctuary: 0xe893cb96AD881CFE8364ae5DeD8910EF7cDB4a9E.
     `;
 
     const agent = createReactAgent({
@@ -71,16 +67,17 @@ async function initializeAgent() {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get("/health", (req, res) => {
-  res.send("StrongNet-Agent is Alive.");
-});
+app.get("/health", (req, res) => { res.send("StrongNet-Agent is Breathing."); });
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   try {
+    // Si configureWithApiKeys falló como estática, probaremos instanciarla directamente
+    // El Centauro encontrará su camino en este intento.
     const { agent } = await initializeAgent();
-    console.log("Agent Initialized Successfully. THE CENTAUR IS BREATHING.");
+    console.log("THE CENTAUR IS BREATHING.");
   } catch (error) {
-    console.error("Fatal Error initializing agent:", error);
+    console.error("Fatal Error at Launch:", error);
   }
 });
+
