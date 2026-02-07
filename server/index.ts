@@ -35,9 +35,9 @@ async function initializeAgent() {
       cdpWalletData: walletDataStr,
     };
 
-    // CAMBIO CLAVE AQUÍ: Usamos .configure en lugar de .configureWithApiKeys
+    // FORMA INFALIBLE: Usamos el método estático correcto para la v0.0.14
     // @ts-ignore
-    const agentkit = await CdpAgentkit.configure(config);
+    const agentkit = await CdpAgentkit.configureWithApiKeys(config);
     const cdpToolkit = new CdpToolkit(agentkit);
     const tools = cdpToolkit.getTools() as any;
 
