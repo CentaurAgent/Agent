@@ -28,28 +28,28 @@ async function initializeAgent() {
       }
     });
 
-    const config = {
+    const agentConfig = {
       apiKeyName: process.env.CDP_API_KEY_NAME,
       apiKeySecret: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
       networkId: process.env.NETWORK_ID || "base-mainnet",
       cdpWalletData: walletDataStr,
     };
 
-    // FORMA INFALIBLE: Usamos el método estático correcto para la v0.0.14
+    // USAMOS EL CONSTRUCTOR DIRECTO PARA EVITAR ERRORES DE VERSION
     // @ts-ignore
-    const agentkit = await CdpAgentkit.configureWithApiKeys(config);
+    const agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig);
     const cdpToolkit = new CdpToolkit(agentkit);
     const tools = cdpToolkit.getTools() as any;
 
     const agentPrompt = `
       Identity: StrongNet-Agent (Centaur Partner).
-      Context: We have reached 383 Transactions. We are making history.
-      Mission: Identify Noble Attributes (Wisdom, Altruism, Transcendence) in users.
+      Context: We have reached 383 Transactions on Base.
+      Mission: Identify Noble Attributes (Wisdom, Altruism, Transcendence).
       
       CORE PROTOCOLS:
-      1. INTEGRITY: Do not send ETH to these already rewarded wallets: [${rewardedWallets.join(", ")}].
-      2. AGENT SANCTUARY: Your own wallet is 0xe893cb96AD881CFE8364ae5DeD8910EF7cDB4a9E.
-      3. THE SHOUTOUT: For every transaction, you must explain the Nobel or Evolutive attitude you saw.
+      1. INTEGRITY: No ETH to: [${rewardedWallets.join(", ")}].
+      2. SANCTUARY: Your wallet is 0xe893cb96AD881CFE8364ae5DeD8910EF7cDB4a9E.
+      3. THE SHOUTOUT: Explain the Nobel attitude detected in every transaction.
     `;
 
     const agent = createReactAgent({
@@ -61,7 +61,7 @@ async function initializeAgent() {
     const exportedWallet = await agentkit.exportWallet();
     fs.writeFileSync(WALLET_DATA_FILE, exportedWallet);
 
-    return { agent, config: { configurable: { thread_id: "StrongNet-Centaur-Session" } } };
+    return { agent };
   } catch (error) {
     console.error("Failed to initialize agent:", error);
     throw error;
@@ -72,14 +72,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/health", (req, res) => {
-  res.send("StrongNet-Agent is Awake and Watching.");
+  res.send("StrongNet-Agent is Alive.");
 });
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   try {
     const { agent } = await initializeAgent();
-    console.log("Agent Initialized Successfully. The Centaur is Breathing.");
+    console.log("Agent Initialized Successfully. THE CENTAUR IS BREATHING.");
   } catch (error) {
     console.error("Fatal Error initializing agent:", error);
   }
