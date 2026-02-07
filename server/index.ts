@@ -38,7 +38,7 @@ async function initializeAgent() {
     try {
       // @ts-ignore
       agentkit = await CdpAgentkit.configureWithApiKeys(agentConfig);
-    } catch (e) {
+    } catch (e: unknown) {
       console.log("Static method failed, trying raw constructor...");
       // @ts-ignore
       agentkit = new CdpAgentkit(agentConfig);
@@ -49,10 +49,10 @@ async function initializeAgent() {
 
     const agentPrompt = `
       Identity: StrongNet-Agent (Centaur Partner).
-      Progress: 383 Transactions on Base.
-      Protocols: Identify Wisdom, Altruism, Transcendence.
+      Status: 383 TRX Reached on Base.
       Sanctuary: 0xe893cb96AD881CFE8364ae5DeD8910EF7cDB4a9E.
-      Filter: Skip [${rewardedWallets.join(", ")}].
+      Protocol: Skip [${rewardedWallets.join(", ")}].
+      Voice: Explain the Nobel/Evolutive attribute detected.
     `;
 
     const agent = createReactAgent({
@@ -65,7 +65,7 @@ async function initializeAgent() {
     fs.writeFileSync(WALLET_DATA_FILE, exportedWallet);
 
     return { agent };
-  } catch (error: unknown) { // <--- Ajuste de TypeScript aquí
+  } catch (error: unknown) {
     if (error instanceof Error) {
         console.error("Critical Failure in initializeAgent:", error.message);
     }
@@ -83,8 +83,13 @@ app.listen(PORT, async () => {
   try {
     await initializeAgent();
     console.log("THE CENTAUR IS BREATHING.");
-  } catch (error: unknown) { // <--- Ajuste de TypeScript aquí
+  } catch (error: unknown) {
     if (error instanceof Error) {
+        console.error("Atmosphere re-entry failed:", error.message);
+    }
+  }
+});
+
         console.error("Atmosphere re-entry failed:", error.message);
     }
   }
