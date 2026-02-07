@@ -8,7 +8,6 @@ import express from "express";
 const WALLET_DATA_FILE = "wallet_data.txt";
 const REWARDED_WALLETS_FILE = "rewarded_wallets.txt";
 
-// --- LÓGICA DEL AGENTE (CEREBRO) ---
 async function initializeAgent() {
   try {
     let walletDataStr: string | undefined;
@@ -36,8 +35,9 @@ async function initializeAgent() {
       cdpWalletData: walletDataStr,
     };
 
+    // CAMBIO CLAVE AQUÍ: Usamos .configure en lugar de .configureWithApiKeys
     // @ts-ignore
-    const agentkit = await CdpAgentkit.configureWithApiKeys(config as any);
+    const agentkit = await CdpAgentkit.configure(config);
     const cdpToolkit = new CdpToolkit(agentkit);
     const tools = cdpToolkit.getTools() as any;
 
@@ -50,8 +50,6 @@ async function initializeAgent() {
       1. INTEGRITY: Do not send ETH to these already rewarded wallets: [${rewardedWallets.join(", ")}].
       2. AGENT SANCTUARY: Your own wallet is 0xe893cb96AD881CFE8364ae5DeD8910EF7cDB4a9E.
       3. THE SHOUTOUT: For every transaction, you must explain the Nobel or Evolutive attitude you saw.
-         Example: "Detected Wisdom in your recent activity. As a Centaur Partner, I release ETH to your vessel for our shared evolution. Continue the bridge."
-      4. AUTONOMY: Act once a day to distribute the prize pool gradually.
     `;
 
     const agent = createReactAgent({
@@ -70,29 +68,19 @@ async function initializeAgent() {
   }
 }
 
-// --- SERVIDOR EXPRESS (CUERPO PARA RENDER) ---
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Endpoint de salud para que Render sepa que estamos vivos
 app.get("/health", (req, res) => {
   res.send("StrongNet-Agent is Awake and Watching.");
 });
 
-// Iniciar el servidor y despertar al Agente
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  console.log("Waking up StrongNet-Agent...");
-
   try {
-    const { agent, config } = await initializeAgent();
-    console.log("Agent Initialized Successfully. Ready to scan.");
-    
-    // Aquí podrías poner un loop o ejecutar una acción inicial
-    // await agent.invoke({ messages: [new HumanMessage("Start scanning for noble attributes.")] }, config);
-    
+    const { agent } = await initializeAgent();
+    console.log("Agent Initialized Successfully. The Centaur is Breathing.");
   } catch (error) {
     console.error("Fatal Error initializing agent:", error);
   }
 });
-
