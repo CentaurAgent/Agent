@@ -5,8 +5,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
-    "build": "tsx script/build.ts",
-    "start": "NODE_ENV=production node dist/index.cjs",
+    "build": "tsc",
+    "start": "node dist/server/index.js || node dist/index.js || tsx server/index.ts",
     "check": "tsc",
     "db:push": "drizzle-kit push"
   },
@@ -115,8 +115,5 @@
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
   }
-}  
-
-
-  
+}
 
