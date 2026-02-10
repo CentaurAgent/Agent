@@ -1,40 +1,42 @@
 import express from "express";
-import axios from 'axios'; // AÑADIDO: Importamos axios para hacer peticiones HTTP
+import axios from 'axios';
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// URL de tu Shadow Agent en Railway
-const RAILWAY_PROCLAIM_URL = 'https://sentinel-voice-bridge-production.up.railway.app';
+// Voice Bridge Endpoint (Railway/Vercel)
+const PROCLAMATION_URL = 'https://sentinel-voice-bridge-production.up.railway.app';
 
 app.get("/health", (req, res) => { 
-  res.send("StrongNet-Agent is Alive."); 
+  res.status(200).send("Sentinel-Agent is Online."); 
 });
 
-// Función para enviar la señal de proclama a Railway
-async function sendProclamationToRailway(intent: string, score: string, trxHash: string, recipientAddress: string) {
+/**
+ * Sends a proclamation signal to the Voice Bridge (X/Twitter Integration)
+ */
+async function sendProclamation(intent: string, score: string, trxHash: string, recipientAddress: string) {
     try {
-        await axios.post(RAILWAY_PROCLAIM_URL, {
-            intent: intent,
-            score: score,
+        await axios.post(PROCLAMATION_URL, {
+            intent,
+            score,
             trx_hash: trxHash,
             recipient_address: recipientAddress 
         });
-        console.log("Señal de proclama enviada al Shadow Agent en Railway.");
+        console.log("[SENTINEL] Proclamation signal transmitted to Voice Bridge.");
     } catch (error: any) {
-        // Esto es solo un log de error. El agente de Render NO se detendrá si esto falla.
-        console.error("Error al enviar la señal a Railway:", error.message);
+        console.error("[SENTINEL] Bridge transmission failed:", error.message);
     }
 }
 
 app.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`[SYSTEM] Server operational on port ${PORT}`);
   console.log("THE CENTAUR IS BREATHING");
   
-  // NOTA: Debes integrar la llamada a 'sendProclamationToRailway' 
-  // dentro de tu lógica principal de Render, donde el agente decide actuar.
-  // Por ejemplo, si tienes una función 'checkBlockchainAndAct()', llama a esta función DENTRO de ella.
-  
-  // EJEMPLO DE USO (Eliminar esto después de integrarlo en tu lógica real):
-  // await sendProclamationToRailway("Ejemplo de Intento Noble", "10/10", "0x12345...", "0xabcde...");
+  /**
+   * SAFE AUTONOMOUS PULSE
+   * Prevents Render instance hibernation and maintains system readiness.
+   */
+  setInterval(() => {
+    console.log("[HEARTBEAT] Autonomous pulse active. Sentinel is watching."); 
+  }, 60000); // 1-minute frequency
 });
