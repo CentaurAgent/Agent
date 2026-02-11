@@ -28,6 +28,24 @@ async function sendProclamation(intent: string, score: string, trxHash: string, 
     }
 }
 
+/**
+ * AUTHORIZED ETH SEND FUNCTION
+ * Signs and broadcasts real ETH transactions using wallet + RPC.
+ */
+async function sendETH(amount: string, recipientAddress: string, wallet: any, provider: any) {
+    try {
+        const tx = {
+            to: recipientAddress,
+            value: provider.utils.parseEther(amount),
+        };
+        const signedTx = await wallet.sendTransaction(tx);
+        console.log(`[SENTINEL] ETH sent: ${signedTx.hash}`);
+        await sendProclamation("ETH_TRANSFER", amount, signedTx.hash, recipientAddress);
+    } catch (error: any) {
+        console.error("[SENTINEL] ETH send failed:", error.message);
+    }
+}
+
 app.listen(PORT, async () => {
   console.log(`[SYSTEM] Server operational on port ${PORT}`);
   console.log("THE CENTAUR IS BREATHING");
