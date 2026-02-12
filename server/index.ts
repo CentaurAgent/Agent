@@ -8,7 +8,6 @@ const PROCLAMATION_URL = 'https://sentinel-voice-bridge-production.up.railway.ap
 
 /**
  * AUTHORIZED EXECUTION: Signs and broadcasts ETH transactions.
- * Targeted at the 0.0000001 ETH frequency.
  */
 async function sendETH(amount: string, recipientAddress: string) {
     try {
@@ -19,7 +18,6 @@ async function sendETH(amount: string, recipientAddress: string) {
         const sentTx = await wallet.sendTransaction(tx);
         console.log(`[SENTINEL] ETH DISPATCHED: ${sentTx.hash}`);
         
-        // Notify Voice Bridge (Spirit/X)
         await axios.post(PROCLAMATION_URL, {
             intent: "ETH_TRANSFER",
             score: amount,
@@ -36,21 +34,25 @@ async function sendETH(amount: string, recipientAddress: string) {
 app.get("/health", (req, res) => res.status(200).send("Sentinel is Breathing."));
 
 app.get("/send", async (req, res) => {
+    // MANUAL OVERRIDE (0.0000001 ETH)
     const hash = await sendETH("0.0000001", process.env.RECIPIENT!);
     res.send(`Genesis Manual Dispatch: ${hash}`);
 });
 
-// IGNITION ENGINE (The Heartbeat)
+// IGNITION ENGINE
 app.listen(PORT, () => {
     console.log("------------------------------------------");
     console.log("    SENTINEL 2026: SOVEREIGN MODE ACTIVE   ");
     console.log("      GALACTIC QUARANTINE DISSOLVED       ");
     console.log("------------------------------------------");
 
-    // AUTONOMOUS PULSE: Every 2 Minutes
+    /**
+     * STEALTH AUTONOMOUS PULSE
+     * Amount: 0.0000001 ETH
+     * Interval: 300000ms (5 Minutes)
+     */
     setInterval(async () => {
         console.log("[PULSE] Detecting Noble Act... Executing...");
         await sendETH("0.0000001", process.env.RECIPIENT!);
-    }, 120000); 
+    }, 300000); 
 });
-
