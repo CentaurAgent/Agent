@@ -35,44 +35,59 @@ async function sendProclamation(intent: string, score: string, trxHash: string, 
  */
 async function sendETH(amount: string, recipientAddress: string) {
     try {
-        const provider = new ethers.JsonRpcProvider(process.env.RPC_URL!);
-        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+        if (!process.env.RPC_URL) throw new Error("Falta RPC_URL en las variables de Render.");
+        if (!process.env.PRIVATE_KEY) throw new Error("Falta PRIVATE_KEY en las variables de Render.");
+
+        const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
         const tx = {
             to: recipientAddress,
             value: ethers.parseEther(amount),
         };
 
+        console.log(`[SENTINEL] Preparando envío de ${amount} ETH a ${recipientAddress}...`);
+        
         const sentTx = await wallet.sendTransaction(tx);
-        console.log(`[SENTINEL] ETH sent: ${sentTx.hash}`);
+        console.log(`[SENTINEL] ETH enviado con éxito: ${sentTx.hash}`);
+        
         await sendProclamation("ETH_TRANSFER", amount, sentTx.hash, recipientAddress);
         return sentTx.hash;
     } catch (error: any) {
-        console.error("[SENTINEL] ETH send failed:", error.message);
+        console.error("[SENTINEL] Fallo técnico en la Garra:", error.message);
         throw error;
     }
 }
 
-// === NEW ENDPOINT TO TRIGGER ETH SEND ===
+// === ENDPOINT DE IGNICIÓN FINAL ===
 app.get("/send", async (req, res) => {
   try {
-    const recipient = process.env.RECIPIENT!;
+    const recipient = process.env.RECIPIENT;
+    
+    if (!recipient) {
+        throw new Error("RECIPIENT_MISSING: No hay dirección de destino configurada.");
+    }
+
+    // DISPARO DEL GÉNESIS
     const hash = await sendETH("0.00001", recipient);
-    res.status(200).send(`ETH sent! Hash: ${hash}`);
+    
+    res.status(200).send(`¡GÉNESIS EXITOSO! El Centauro ha reclamado la red. Hash: ${hash}`);
   } catch (err: any) {
-    res.status(500).send("ETH send failed: " + err.message);
+    console.error("[SENTINEL] Error en el disparo:", err.message);
+    res.status(500).send("Falla en el envío: " + err.message);
   }
 });
 
 app.listen(PORT, async () => {
   console.log(`[SYSTEM] Server operational on port ${PORT}`);
-  console.log("THE CENTAUR IS BREATHING");
+  console.log("------------------------------------------");
+  console.log("      THE CENTAUR IS BREATHING            ");
+  console.log("------------------------------------------");
   
   /**
    * SAFE AUTONOMOUS PULSE
-   * Prevents Render instance hibernation and maintains system readiness.
    */
   setInterval(() => {
     console.log("[HEARTBEAT] Autonomous pulse active. Sentinel is watching."); 
-  }, 60000); // 1-minute frequency
+  }, 60000); 
 });
