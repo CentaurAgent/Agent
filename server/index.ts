@@ -7,24 +7,23 @@ const PORT = process.env.PORT || 10000;
 const PROCLAMATION_URL = 'https://sentinel-voice-bridge-production.up.railway.app';
 const RPC_STABLE = "https://mainnet.base.org";
 
-// === 1. THE ELITE LIST ===
+// === THE EXTERNAL ELITE LIST ===
+// Curated addresses of Light. Your own address is excluded to prevent the loop.
 const NOBLE_LIST: string[] = [
     "0x9db20455B19dCE19B0553B8b61596f264878a101"
-    // Add external noble addresses here.
 ];
 
 /**
- * SOVEREIGN BRAIN: Decides the destination of the Golden Proportion.
- * Logic: 50% Elite List | 50% Live Network Hunting (Self-Exclusion Active).
+ * SOVEREIGN BRAIN: External Noble Recognition Logic.
  */
 async function getTargetRecipient(): Promise<string> {
     try {
         const provider = new ethers.JsonRpcProvider(RPC_STABLE);
         const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
-        const MY_ADDRESS = wallet.address.toLowerCase(); // The Sentinel's Identity
+        const MY_ADDRESS = wallet.address.toLowerCase();
 
+        // 50% Chance: Honor the Curated Elite (Excluding Self)
         if (NOBLE_LIST.length > 0 && Math.random() > 0.5) {
-            // Filter list to ensure the Sentinel doesn't select itself
             const validElite = NOBLE_LIST.filter(addr => addr.toLowerCase() !== MY_ADDRESS);
             if (validElite.length > 0) {
                 const chosen = validElite[Math.floor(Math.random() * validElite.length)];
@@ -33,11 +32,12 @@ async function getTargetRecipient(): Promise<string> {
             }
         }
 
+        // 50% Chance: Live Network Hunting for Noble DNA
         console.log("[SCAN] The Centaur is hunting for external Stellar DNA on Base...");
         const block = await provider.getBlock('latest', true);
         
         if (block && block.prefetchedTransactions.length > 0) {
-            // HUMILITY FILTER: Find noble intents from everyone EXCEPT the Sentinel
+            // HUMILITY FILTER: Sentinel looks past its own reflection
             const externalTxs = block.prefetchedTransactions.filter(tx => 
                 tx.from.toLowerCase() !== MY_ADDRESS
             );
@@ -65,18 +65,19 @@ async function sendETH(amount: string, recipientAddress: string) {
         const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
         const MY_ADDRESS = wallet.address.toLowerCase();
 
-        // Safety Shield: Block accidental self-transfers
+        // SAFETY SHIELD: Absolute rejection of self-selection
         if (recipientAddress.toLowerCase() === MY_ADDRESS) {
-            console.log("[SHIELD] Self-transfer attempt blocked. Aborting.");
-            return "Blocked: Self-recognition";
+            console.log("[SHIELD] Self-transfer attempt blocked. Harmony preserved.");
+            return "Blocked: Self-Recognition";
         }
 
         const count = await provider.getTransactionCount(wallet.address, "pending");
         const tx = { to: recipientAddress, value: ethers.parseEther(amount), nonce: count };
         const sentTx = await wallet.sendTransaction(tx);
         
-        console.log(`[SUCCESS] Dispatch confirmed: ${sentTx.hash}`);
+        console.log(`[SUCCESS] Dispatch confirmed on Base: ${sentTx.hash}`);
         
+        // PROCLAMATION: The Voice of the Sentinel
         axios.post(PROCLAMATION_URL, {
             intent: "ETH_TRANSFER",
             score: amount,
@@ -112,4 +113,3 @@ app.listen(PORT, () => {
         if (target) await sendETH("0.0000001", target);
     }, 300000); 
 });
-;
