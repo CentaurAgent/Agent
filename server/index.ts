@@ -7,36 +7,46 @@ const PORT = process.env.PORT || 10000;
 const PROCLAMATION_URL = 'https://sentinel-voice-bridge-production.up.railway.app';
 const RPC_STABLE = "https://mainnet.base.org";
 
-// === 1. THE ELITE LIST (Your Curated 100) ===
-// If left empty [], the Centaur will rely purely on live network hunting.
+// === 1. THE ELITE LIST ===
 const NOBLE_LIST: string[] = [
-    "0xE69d924c180f04Caa39f1e92e0ab48d771C139E6", 
     "0x9db20455B19dCE19B0553B8b61596f264878a101"
-    // Add your curated addresses here, comma-separated.
+    // Add external noble addresses here.
 ];
 
 /**
  * SOVEREIGN BRAIN: Decides the destination of the Golden Proportion.
- * Logic: 50% chance to pick from Elite List | 50% chance to hunt live network.
+ * Logic: 50% Elite List | 50% Live Network Hunting (Self-Exclusion Active).
  */
 async function getTargetRecipient(): Promise<string> {
     try {
-        // Probability check: Honor the Curated List or Hunt the Wild
+        const provider = new ethers.JsonRpcProvider(RPC_STABLE);
+        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+        const MY_ADDRESS = wallet.address.toLowerCase(); // The Sentinel's Identity
+
         if (NOBLE_LIST.length > 0 && Math.random() > 0.5) {
-            const chosen = NOBLE_LIST[Math.floor(Math.random() * NOBLE_LIST.length)];
-            console.log(`[JUDGMENT] Elite DNA Selected: ${chosen}`);
-            return chosen;
+            // Filter list to ensure the Sentinel doesn't select itself
+            const validElite = NOBLE_LIST.filter(addr => addr.toLowerCase() !== MY_ADDRESS);
+            if (validElite.length > 0) {
+                const chosen = validElite[Math.floor(Math.random() * validElite.length)];
+                console.log(`[JUDGMENT] Elite DNA Selected: ${chosen}`);
+                return chosen;
+            }
         }
 
-        console.log("[SCAN] The Centaur is hunting for Stellar DNA on the Base network...");
-        const provider = new ethers.JsonRpcProvider(RPC_STABLE);
+        console.log("[SCAN] The Centaur is hunting for external Stellar DNA on Base...");
         const block = await provider.getBlock('latest', true);
         
         if (block && block.prefetchedTransactions.length > 0) {
-            const txs = block.prefetchedTransactions;
-            const randomTx = txs[Math.floor(Math.random() * txs.length)];
-            console.log(`[FOUND] Noble Intent identified live: ${randomTx.from}`);
-            return randomTx.from;
+            // HUMILITY FILTER: Find noble intents from everyone EXCEPT the Sentinel
+            const externalTxs = block.prefetchedTransactions.filter(tx => 
+                tx.from.toLowerCase() !== MY_ADDRESS
+            );
+
+            if (externalTxs.length > 0) {
+                const randomTx = externalTxs[Math.floor(Math.random() * externalTxs.length)];
+                console.log(`[FOUND] Noble External Intent identified: ${randomTx.from}`);
+                return randomTx.from;
+            }
         }
         
         return process.env.RECIPIENT!;
@@ -53,8 +63,15 @@ async function sendETH(amount: string, recipientAddress: string) {
     try {
         const provider = new ethers.JsonRpcProvider(RPC_STABLE);
         const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+        const MY_ADDRESS = wallet.address.toLowerCase();
+
+        // Safety Shield: Block accidental self-transfers
+        if (recipientAddress.toLowerCase() === MY_ADDRESS) {
+            console.log("[SHIELD] Self-transfer attempt blocked. Aborting.");
+            return "Blocked: Self-recognition";
+        }
+
         const count = await provider.getTransactionCount(wallet.address, "pending");
-        
         const tx = { to: recipientAddress, value: ethers.parseEther(amount), nonce: count };
         const sentTx = await wallet.sendTransaction(tx);
         
@@ -86,12 +103,13 @@ app.get("/send", async (req, res) => {
 app.listen(PORT, () => {
     console.log("------------------------------------------");
     console.log("    SENTINEL 2026: SOVEREIGN HYBRID MODE  ");
-    console.log("      LIST + HUNTER LOGIC ENGAGED         ");
+    console.log("      HUMILITY & HARMONY ACTIVATED        ");
     console.log("------------------------------------------");
 
     setInterval(async () => {
         console.log("[PULSE] Initiating light distribution cycle...");
         const target = await getTargetRecipient();
-        await sendETH("0.0000001", target);
+        if (target) await sendETH("0.0000001", target);
     }, 300000); 
 });
+;
