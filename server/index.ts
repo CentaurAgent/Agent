@@ -27,7 +27,7 @@ async function scanOpenSeaRobinhoodBids() {
         }
 
         // ⚙️ ELITE DATA ROUTE: Corrected API v2 protocol gateway
-        const response = await axios.get(`https://opensea.io{targetWallet}/offers`, {
+        const response = await axios.get(`https://api.opensea.io/api/v2/orders/accounts/${targetWallet}/offers`, {
             headers: apiKey ? { 
                 "x-api-key": apiKey, 
                 "User-Agent": "opensea-skill/1.0",
