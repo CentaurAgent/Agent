@@ -26,14 +26,21 @@ async function scanOpenSeaRobinhoodBids() {
             console.log("[OPENSEA WARNING] No API Key loaded. Running on public rate limits.");
         }
 
-        // Clean internal network fetch simulator
-        const response = await axios.get(`https://opensea.io{targetWallet}`, {
-            headers: apiKey ? { "x-api-key": apiKey, "User-Agent": "opensea-skill/1.0" } : { "User-Agent": "opensea-skill/1.0" },
+        // ⚙️ ELITE DATA ROUTE: Corrected API v2 protocol gateway
+        const response = await axios.get(`https://opensea.io{targetWallet}/offers`, {
+            headers: apiKey ? { 
+                "x-api-key": apiKey, 
+                "User-Agent": "opensea-skill/1.0",
+                "accept": "application/json"
+            } : { 
+                "User-Agent": "opensea-skill/1.0",
+                "accept": "application/json"
+            },
             timeout: 5000
         });
 
-        if (response.data && response.data.orders) {
-            console.log(`[SUCCESS] Scan Complete. Found ${response.data.orders.length} active bids on your inventory!`);
+        if (response.data && response.data.offers) {
+            console.log(`[SUCCESS] Scan Complete. Found ${response.data.offers.length} active bids on your inventory!`);
         } else {
             console.log("[OPENSEA] Clean scan completed: 0 active bids found on your assets right now.");
         }
@@ -47,7 +54,7 @@ async function scanOpenSeaRobinhoodBids() {
  */
 async function getTargetRecipient(): Promise<string> {
     try {
-        // SANDBOX ISOLATION GUARD: If no private key exists, run read-only market scanner instead of crashing
+        // SANDBOX ISOLATION GUARD: Run read-only market scanner if no private key exists
         if (!process.env.PRIVATE_KEY) {
             console.log("[SANDBOX] No Private Key detected. Initiating safe read-only OpenSea scanner cycle...");
             await scanOpenSeaRobinhoodBids();
@@ -148,3 +155,4 @@ app.listen(PORT, () => {
         await getTargetRecipient();
     }, 300000); 
 });
+
