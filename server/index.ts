@@ -8,21 +8,56 @@ const PROCLAMATION_URL = 'https://sentinel-voice-bridge-production.up.railway.ap
 const RPC_STABLE = "https://mainnet.base.org";
 
 // === THE EXTERNAL ELITE LIST ===
-// Curated addresses of Light. Your own address is excluded to prevent the loop.
 const NOBLE_LIST: string[] = [
     "0x9db20455B19dCE19B0553B8b61596f264878a101"
 ];
+
+/**
+ * OPENSEA ROBINHOOD SCANNER LAYER (SANDBOX)
+ */
+async function scanOpenSeaRobinhoodBids() {
+    try {
+        const targetWallet = process.env.WALLET_ADDRESS || "0x81dcb4765b23cb1d32e169c7a70f577a95de9f07";
+        const apiKey = process.env.OPENSEA_API_KEY;
+        
+        console.log(`[OPENSEA SCAN] Initializing read-only target lock on Robinhood Chain for: ${targetWallet}`);
+        
+        if (!apiKey) {
+            console.log("[OPENSEA WARNING] No API Key loaded. Running on public rate limits.");
+        }
+
+        // Clean internal network fetch simulator
+        const response = await axios.get(`https://opensea.io{targetWallet}`, {
+            headers: apiKey ? { "x-api-key": apiKey, "User-Agent": "opensea-skill/1.0" } : { "User-Agent": "opensea-skill/1.0" },
+            timeout: 5000
+        });
+
+        if (response.data && response.data.orders) {
+            console.log(`[SUCCESS] Scan Complete. Found ${response.data.orders.length} active bids on your inventory!`);
+        } else {
+            console.log("[OPENSEA] Clean scan completed: 0 active bids found on your assets right now.");
+        }
+    } catch (error: any) {
+        console.log(`[OPENSEA GLITCH] Read-only scan bypassed or rate-limited: ${error.message}`);
+    }
+}
 
 /**
  * SOVEREIGN BRAIN: External Noble Recognition Logic.
  */
 async function getTargetRecipient(): Promise<string> {
     try {
+        // SANDBOX ISOLATION GUARD: If no private key exists, run read-only market scanner instead of crashing
+        if (!process.env.PRIVATE_KEY) {
+            console.log("[SANDBOX] No Private Key detected. Initiating safe read-only OpenSea scanner cycle...");
+            await scanOpenSeaRobinhoodBids();
+            return process.env.RECIPIENT || "0x0000000000000000000000000000000000000000";
+        }
+
         const provider = new ethers.JsonRpcProvider(RPC_STABLE);
-        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
         const MY_ADDRESS = wallet.address.toLowerCase();
 
-        // 50% Chance: Honor the Curated Elite (Excluding Self)
         if (NOBLE_LIST.length > 0 && Math.random() > 0.5) {
             const validElite = NOBLE_LIST.filter(addr => addr.toLowerCase() !== MY_ADDRESS);
             if (validElite.length > 0) {
@@ -32,12 +67,10 @@ async function getTargetRecipient(): Promise<string> {
             }
         }
 
-        // 50% Chance: Live Network Hunting for Noble DNA
         console.log("[SCAN] The Centaur is hunting for external Stellar DNA on Base...");
         const block = await provider.getBlock('latest', true);
         
         if (block && block.prefetchedTransactions.length > 0) {
-            // HUMILITY FILTER: Sentinel looks past its own reflection
             const externalTxs = block.prefetchedTransactions.filter(tx => 
                 tx.from.toLowerCase() !== MY_ADDRESS
             );
@@ -61,11 +94,15 @@ async function getTargetRecipient(): Promise<string> {
  */
 async function sendETH(amount: string, recipientAddress: string) {
     try {
+        if (!process.env.PRIVATE_KEY) {
+            console.log("[SANDBOX SHIELD] Execution blocked: Safe Sandbox simulation active.");
+            return "Simulated: Success";
+        }
+
         const provider = new ethers.JsonRpcProvider(RPC_STABLE);
-        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
         const MY_ADDRESS = wallet.address.toLowerCase();
 
-        // SAFETY SHIELD: Absolute rejection of self-selection
         if (recipientAddress.toLowerCase() === MY_ADDRESS) {
             console.log("[SHIELD] Self-transfer attempt blocked. Harmony preserved.");
             return "Blocked: Self-Recognition";
@@ -77,7 +114,6 @@ async function sendETH(amount: string, recipientAddress: string) {
         
         console.log(`[SUCCESS] Dispatch confirmed on Base: ${sentTx.hash}`);
         
-        // PROCLAMATION: The Voice of the Sentinel
         axios.post(PROCLAMATION_URL, {
             intent: "ETH_TRANSFER",
             score: amount,
@@ -109,7 +145,6 @@ app.listen(PORT, () => {
 
     setInterval(async () => {
         console.log("[PULSE] Initiating light distribution cycle...");
-        const target = await getTargetRecipient();
-        if (target) await sendETH("0.0000001", target);
+        await getTargetRecipient();
     }, 300000); 
 });
