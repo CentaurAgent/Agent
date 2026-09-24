@@ -16,9 +16,9 @@ const SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || "180000"); // 
 
 const OPENSEA_BASE = "https://api.opensea.io/api/v2";
 
-// Simple floor cache
+// Floor cache
 const floorCache = new Map<string, { value: number | null; expires: number }>();
-const FLOOR_CACHE_TTL = 90_000; // 90 seconds
+const FLOOR_CACHE_TTL = 90_000;
 
 // ====================== HELPERS ======================
 function log(level: string, msg: string, data?: any) {
@@ -29,14 +29,13 @@ function log(level: string, msg: string, data?: any) {
 async function getHeaders() {
   const headers: any = {
     accept: "application/json",
-    "User-Agent": "Centaur-Agent-Claw/2.2",
+    "User-Agent": "Centaur-Agent-Claw/2.3",
   };
   if (OPENSEA_API_KEY) headers["x-api-key"] = OPENSEA_API_KEY;
   return headers;
 }
 
 async function fetchReceivedOffers(address: string) {
-  // Try the more current path first, then fallback
   try {
     const res = await axios.get(`${OPENSEA_BASE}/accounts/${address}/offers_received`, {
       headers: await getHeaders(),
@@ -86,9 +85,7 @@ async function getFloor(slug: string): Promise<number | null> {
   if (!slug || slug === "unknown") return null;
 
   const cached = floorCache.get(slug);
-  if (cached && cached.expires > Date.now()) {
-    return cached.value;
-  }
+  if (cached && cached.expires > Date.now()) return cached.value;
 
   try {
     const res = await axios.get(`${OPENSEA_BASE}/collections/${slug}/stats`, {
@@ -103,8 +100,7 @@ async function getFloor(slug: string): Promise<number | null> {
       res.data?.stats?.floor_price ??
       null;
 
-    const value = floor !== null && floor !== undefined ? Number(floor) : null;
-
+    const value = floor != null ? Number(floor) : null;
     floorCache.set(slug, { value, expires: Date.now() + FLOOR_CACHE_TTL });
     return value;
   } catch {
@@ -131,13 +127,8 @@ async function scanAndEvaluateBids() {
       return;
     }
 
-    // TypeScript-safe unique slugs + cache floors
     const uniqueSlugs: string[] = Array.from(
-      new Set(
-        offers
-          .map(getCollectionSlug)
-          .filter((s: string) => s !== "unknown")
-      )
+      new Set(offers.map(getCollectionSlug).filter((s: string) => s !== "unknown"))
     );
 
     log("SCAN", `Fetching floors for ${uniqueSlugs.length} unique collections...`);
@@ -171,22 +162,18 @@ async function scanAndEvaluateBids() {
         isExtreme,
         orderHash: offer?.order_hash || offer?.orderHash || null,
         tokenId: offer?.item?.token_id || offer?.nft?.identifier || null,
+        chain: offer?.item?.chain || offer?.chain || null,
         offer,
       });
     }
 
-    // Sort: Extreme → highest multiplier → highest price
     evaluated.sort((a, b) => {
       if (a.isExtreme !== b.isExtreme) return a.isExtreme ? -1 : 1;
-      if ((b.multiplier || 0) !== (a.multiplier || 0)) {
-        return (b.multiplier || 0) - (a.multiplier || 0);
-      }
+      if ((b.multiplier || 0) !== (a.multiplier || 0)) return (b.multiplier || 0) - (a.multiplier || 0);
       return b.priceEth - a.priceEth;
     });
 
-    const actionable = evaluated.filter(
-      (e) => e.isInteresting || e.isOutlier || e.isExtreme
-    );
+    const actionable = evaluated.filter(e => e.isInteresting || e.isOutlier || e.isExtreme);
 
     if (actionable.length === 0) {
       log("DECISION", "No bids met the criteria.");
@@ -204,23 +191,45 @@ async function scanAndEvaluateBids() {
 }
 
 async function handleBid(bid: any) {
-  const multText = bid.multiplier
-    ? `${bid.multiplier.toFixed(1)}x floor`
-    : "no floor data";
+  const multText = bid.multiplier ? `${bid.multiplier.toFixed(1)}x floor` : "no floor data";
 
   if (bid.isExtreme) {
-    log("EXTREME", `🔥 INSANE BID DETECTED: ${bid.priceEth.toFixed(4)} ETH (${multText}) on ${bid.collectionSlug}`);
+    log("EXTREME", `🔥 INSANE BID: ${bid.priceEth.toFixed(4)} ETH (${multText}) on ${bid.collectionSlug}`);
   } else if (bid.isOutlier) {
     log("OUTLIER", `🚀 Strong outlier: ${bid.priceEth.toFixed(4)} ETH (${multText}) on ${bid.collectionSlug}`);
   } else {
     log("INTERESTING", `💰 Decent bid: ${bid.priceEth.toFixed(4)} ETH on ${bid.collectionSlug}`);
   }
 
+  // === SIMULATION with real fulfillment check ===
   if (DRY_RUN) {
     log("SIMULATION", `Would ACCEPT this offer`);
-    log("SIMULATION", `Order Hash: ${bid.orderHash || "unknown"}`);
-    log("SIMULATION", `Collection: ${bid.collectionSlug} | Price: ${bid.priceEth.toFixed(4)} ETH | ${multText}`);
-    log("SIMULATION", `→ In live mode this would trigger Seaport fulfillment`);
+    log("SIMULATION", `Order Hash : ${bid.orderHash || "unknown"}`);
+    log("SIMULATION", `Token ID   : ${bid.tokenId || "n/a"} | Chain: ${bid.chain || "n/a"}`);
+    log("SIMULATION", `Collection : ${bid.collectionSlug} | ${bid.priceEth.toFixed(4)} ETH | ${multText}`);
+
+    // Try to get real fulfillment data (safe - read only)
+    if (bid.orderHash) {
+      try {
+        const res = await axios.post(
+          `${OPENSEA_BASE}/offers/fulfillment_data`,
+          {
+            offer: { hash: bid.orderHash },
+            fulfiller: { address: WALLET_ADDRESS },
+          },
+          { headers: await getHeaders(), timeout: 6000 }
+        );
+
+        if (res.data?.fulfillment_data) {
+          log("SIMULATION", `✅ Fulfillment data received – order looks valid`);
+        } else {
+          log("SIMULATION", `⚠️ No fulfillment data returned`);
+        }
+      } catch (err: any) {
+        log("SIMULATION", `Fulfillment check failed (normal in dry-run): ${err.message}`);
+      }
+    }
+
     return;
   }
 
@@ -230,9 +239,10 @@ async function handleBid(bid: any) {
 // ====================== SERVER ======================
 app.get("/health", (_req, res) => {
   res.json({
-    status: "Centaur Agent Claw v2.2 – Optimized Scanner",
+    status: "Centaur Agent Claw v2.3",
     dryRun: DRY_RUN,
     wallet: WALLET_ADDRESS || null,
+    floorCacheSize: floorCache.size,
   });
 });
 
@@ -243,8 +253,8 @@ app.get("/scan", async (_req, res) => {
 
 app.listen(PORT, () => {
   console.log("-----------------------------------------------");
-  console.log("  CENTAUR AGENT CLAW v2.2");
-  console.log("  NFT Bid Scanner + Simulated Acceptance");
+  console.log("  CENTAUR AGENT CLAW v2.3");
+  console.log("  + Realistic fulfillment simulation");
   console.log(`  DRY_RUN: ${DRY_RUN}  |  Port: ${PORT}`);
   console.log("-----------------------------------------------");
 
