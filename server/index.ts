@@ -1,7 +1,6 @@
 import express from "express";
 import axios from "axios";
 import { ethers } from "ethers";
-import { OpenSeaSDK, Chain } from "@opensea/sdk";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -18,27 +17,19 @@ const SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || "180000"); // 
 const OPENSEA_BASE = "https://api.opensea.io/api/v2";
 const RPC_URL = process.env.RPC_URL || "https://eth.llamarpc.com";
 
-// ====================== WALLET + SDK ======================
+// ====================== WALLET ======================
 let wallet: ethers.Wallet | null = null;
-let sdk: any = null;
 
 if (PRIVATE_KEY) {
   try {
     const provider = new ethers.JsonRpcProvider(RPC_URL);
     wallet = new ethers.Wallet(PRIVATE_KEY, provider);
-
-    sdk = new OpenSeaSDK(wallet, {
-      chain: Chain.Mainnet,
-      apiKey: OPENSEA_API_KEY || undefined,
-    });
-
     console.log(`✅ Wallet loaded: ${wallet.address}`);
-    console.log(`✅ OpenSea SDK ready`);
   } catch (err: any) {
-    console.error("❌ Failed to load wallet/SDK:", err.message);
+    console.error("❌ Failed to load wallet:", err.message);
   }
 } else {
-  console.warn("⚠️ PRIVATE_KEY not set – live listing disabled");
+  console.warn("⚠️ PRIVATE_KEY not set – listing & signing disabled");
 }
 
 // Floor cache
@@ -54,7 +45,7 @@ function log(level: string, msg: string, data?: any) {
 async function getHeaders() {
   const headers: any = {
     accept: "application/json",
-    "User-Agent": "Centaur-Agent-Claw/2.5",
+    "User-Agent": "Centaur-Agent-Claw/2.4",
   };
   if (OPENSEA_API_KEY) headers["x-api-key"] = OPENSEA_API_KEY;
   return headers;
@@ -129,8 +120,10 @@ async function getFloor(slug: string): Promise<number | null> {
   }
 }
 
+// ====================== NEW: Fetch NFTs the wallet owns ======================
 async function fetchOwnedNFTs(address: string) {
   try {
+    // Using Ethereum mainnet for now. Change "ethereum" if you use another chain.
     const res = await axios.get(`${OPENSEA_BASE}/chain/ethereum/account/${address}/nfts`, {
       headers: await getHeaders(),
       params: { limit: 50 },
@@ -143,7 +136,7 @@ async function fetchOwnedNFTs(address: string) {
   }
 }
 
-// ====================== LISTING LOGIC ======================
+// ====================== NEW: Listing logic (simulation first) ======================
 async function listOwnedNFTs() {
   if (!WALLET_ADDRESS) {
     log("ERROR", "WALLET_ADDRESS is required for listing");
@@ -151,6 +144,7 @@ async function listOwnedNFTs() {
   }
 
   log("LIST", `Checking NFTs owned by ${WALLET_ADDRESS}...`);
+
   const nfts = await fetchOwnedNFTs(WALLET_ADDRESS);
 
   if (nfts.length === 0) {
@@ -163,49 +157,22 @@ async function listOwnedNFTs() {
   for (const nft of nfts) {
     const collection = nft.collection || "unknown";
     const tokenId = nft.identifier || nft.token_id || "unknown";
-    const contractAddress = nft.contract;
     const name = nft.name || `${collection} #${tokenId}`;
 
+    // Simple first strategy: list at 1.15× floor (you can change this later)
     const floor = await getFloor(collection);
     const listPrice = floor && floor > 0 ? floor * 1.15 : null;
 
-    // Safety / Simulation mode
-    if (DRY_RUN || !wallet || !sdk) {
+    if (DRY_RUN) {
       log("SIMULATION", `Would LIST: ${name}`);
       log("SIMULATION", `Collection : ${collection}`);
       log("SIMULATION", `Token ID   : ${tokenId}`);
       log("SIMULATION", `Floor      : ${floor ? floor.toFixed(4) + " ETH" : "unknown"}`);
       log("SIMULATION", `List price : ${listPrice ? listPrice.toFixed(4) + " ETH" : "could not calculate"}`);
       log("SIMULATION", `----------------------------------------`);
-      continue;
-    }
-
-    // Real listing
-    if (!listPrice || !contractAddress || tokenId === "unknown") {
-      log("SKIP", `Cannot list ${name}: missing data`);
-      continue;
-    }
-
-    try {
-      log("LIVE", `Creating real listing for ${name} at ${listPrice.toFixed(4)} ETH...`);
-
-      const expirationTime = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60; // 7 days
-
-      const listing = await sdk.createListing({
-        asset: {
-          tokenAddress: contractAddress,
-          tokenId: String(tokenId),
-        },
-        accountAddress: WALLET_ADDRESS,
-        amount: listPrice,
-        expirationTime,
-      });
-
-      log("SUCCESS", `🎉 LISTED SUCCESSFULLY: ${name}`);
-      log("SUCCESS", `Price: ${listPrice.toFixed(4)} ETH`);
-      console.log("Listing response:", listing);
-    } catch (err: any) {
-      log("ERROR", `Failed to list ${name}: ${err.message}`);
+    } else {
+      // Real listing will go here later (Seaport signing)
+      log("LIVE", "Real listing is still disabled for safety.");
     }
   }
 }
@@ -310,11 +277,10 @@ async function handleBid(bid: any) {
 // ====================== SERVER ======================
 app.get("/health", (_req, res) => {
   res.json({
-    status: "Centaur Agent Claw v2.5",
+    status: "Centaur Agent Claw v2.4",
     dryRun: DRY_RUN,
     wallet: WALLET_ADDRESS || null,
     walletLoaded: !!wallet,
-    sdkReady: !!sdk,
     floorCacheSize: floorCache.size,
   });
 });
@@ -331,12 +297,11 @@ app.get("/list", async (_req, res) => {
 
 app.listen(PORT, () => {
   console.log("-----------------------------------------------");
-  console.log("  CENTAUR AGENT CLAW v2.5");
-  console.log("  + OpenSea SDK + Real Listing support");
+  console.log("  CENTAUR AGENT CLAW v2.4");
+  console.log("  + Wallet control + Listing simulation");
   console.log(`  DRY_RUN     : ${DRY_RUN}`);
   console.log(`  Wallet      : ${WALLET_ADDRESS || "not set"}`);
   console.log(`  Wallet ready: ${wallet ? "YES" : "NO"}`);
-  console.log(`  SDK ready   : ${sdk ? "YES" : "NO"}`);
   console.log(`  Port        : ${PORT}`);
   console.log("-----------------------------------------------");
 
@@ -344,6 +309,7 @@ app.listen(PORT, () => {
   scanAndEvaluateBids();
   setInterval(scanAndEvaluateBids, SCAN_INTERVAL_MS);
 
+  // Also check owned NFTs every 5 minutes
   listOwnedNFTs();
   setInterval(listOwnedNFTs, 5 * 60 * 1000);
 });
