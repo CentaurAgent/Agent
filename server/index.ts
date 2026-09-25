@@ -170,15 +170,97 @@ async function listOwnedNFTs() {
       log("SIMULATION", `Floor      : ${floor ? floor.toFixed(4) + " ETH" : "unknown"}`);
       log("SIMULATION", `List price : ${listPrice ? listPrice.toFixed(4) + " ETH" : "could not calculate"}`);
       log("SIMULATION", `----------------------------------------`);
-    } else {
-      // Real listing will go here later (Seaport signing)
-      log("LIVE", "Real listing is still disabled for safety.");
+   } else {
+      if (!wallet) {
+        log("ERROR", `Cannot list ${name}: Private Key or Wallet not ready.`);
+        continue;
+      }
+      if (!listPrice) {
+        log("ERROR", `Skipping listing for ${name}: Could not calculate list price.`);
+        continue;
+      }
+
+      try {
+        log("LIVE", `Executing live Seaport listing for ${name} at ${listPrice.toFixed(4)} ETH...`);
+
+        const headers = await getHeaders();
+        const orderParametersResponse = await axios.post(
+          `${OPENSEA_BASE}/orders/ethereum/seaport/listings`,
+          {
+            asset: {
+              token_address: nft.token_address || nft.asset_contract?.address,
+              token_id: tokenId,
+            },
+            quantity: 1,
+            price: ethers.parseEther(listPrice.toFixed(6)).toString(),
+            expiration_time: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+          },
+          { headers }
+        );
+
+        const { order_components, order_hash } = orderParametersResponse.data;
+
+        log("LIVE", `Signing order hash: ${order_hash}`);
+        const domain = {
+          name: "Seaport",
+          version: "1.6",
+          chainId: 1,
+          verifyingContract: "0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC",
+        };
+
+        const types = {
+          OrderComponents: [
+            { name: "offerer", type: "address" },
+            { name: "zone", type: "address" },
+            { name: "offer", type: "OfferItem[]" },
+            { name: "consideration", type: "ConsiderationItem[]" },
+            { name: "orderType", type: "uint8" },
+            { name: "startTime", type: "uint256" },
+            { name: "endTime", type: "uint256" },
+            { name: "zoneHash", type: "bytes32" },
+            { name: "salt", type: "uint256" },
+            { name: "conduitKey", type: "bytes32" },
+            { name: "counter", type: "uint256" },
+          ],
+          OfferItem: [
+            { name: "itemType", type: "uint8" },
+            { name: "token", type: "address" },
+            { name: "identifierOrCriteria", type: "uint256" },
+            { name: "startAmount", type: "uint256" },
+            { name: "endAmount", type: "uint256" },
+          ],
+          ConsiderationItem: [
+            { name: "itemType", type: "uint8" },
+            { name: "token", type: "address" },
+            { name: "identifierOrCriteria", type: "uint256" },
+            { name: "startAmount", type: "uint256" },
+            { name: "endAmount", type: "uint256" },
+            { name: "recipient", type: "address" },
+          ],
+        };
+
+        const signature = await wallet.signTypedData(domain, types, order_components);
+
+        await axios.post(
+          `${OPENSEA_BASE}/orders/ethereum/seaport/listings/submit`,
+          {
+            order_components,
+            signature,
+          },
+          { headers }
+        );
+
+        log("SUCCESS", `🎉 LIVE MARKET listing completed for ${name} at ${listPrice.toFixed(4)} ETH!`);
+           } catch (err: any) {
+        log("ERROR", `Failed live listing sequence for ${name}`, err.response?.data || err.message);
+      }
     }
   }
 }
 
 // ====================== CORE (offers) ======================
 async function scanAndEvaluateBids() {
+
   if (!WALLET_ADDRESS) {
     log("ERROR", "WALLET_ADDRESS is required");
     return;
