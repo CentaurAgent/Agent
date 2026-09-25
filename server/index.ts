@@ -1,6 +1,7 @@
 import express from "express";
 import axios from "axios";
 import { ethers } from "ethers";
+import { OpenSeaSDK, Chain } from "@opensea/sdk";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -17,19 +18,28 @@ const SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || "180000"); // 
 const OPENSEA_BASE = "https://api.opensea.io/api/v2";
 const RPC_URL = process.env.RPC_URL || "https://eth.llamarpc.com";
 
-// ====================== WALLET ======================
+// ====================== WALLET + SDK ======================
 let wallet: ethers.Wallet | null = null;
+let sdk: any = null;
 
 if (PRIVATE_KEY) {
   try {
     const provider = new ethers.JsonRpcProvider(RPC_URL);
     wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+
+    // Force type to avoid TypeScript error
+    sdk = new OpenSeaSDK(wallet as any, {
+      chain: Chain.Mainnet,
+      apiKey: OPENSEA_API_KEY || undefined,
+    });
+
     console.log(`✅ Wallet loaded: ${wallet.address}`);
+    console.log(`✅ OpenSea SDK ready`);
   } catch (err: any) {
-    console.error("❌ Failed to load wallet:", err.message);
+    console.error("❌ Failed to load wallet/SDK:", err.message);
   }
 } else {
-  console.warn("⚠️ PRIVATE_KEY not set – listing & signing disabled");
+  console.warn("⚠️ PRIVATE_KEY not set – live listing disabled");
 }
 
 // Floor cache
@@ -45,7 +55,7 @@ function log(level: string, msg: string, data?: any) {
 async function getHeaders() {
   const headers: any = {
     accept: "application/json",
-    "User-Agent": "Centaur-Agent-Claw/2.4",
+    "User-Agent": "Centaur-Agent-Claw/2.5",
   };
   if (OPENSEA_API_KEY) headers["x-api-key"] = OPENSEA_API_KEY;
   return headers;
@@ -120,10 +130,8 @@ async function getFloor(slug: string): Promise<number | null> {
   }
 }
 
-// ====================== NEW: Fetch NFTs the wallet owns ======================
 async function fetchOwnedNFTs(address: string) {
   try {
-    // Using Ethereum mainnet for now. Change "ethereum" if you use another chain.
     const res = await axios.get(`${OPENSEA_BASE}/chain/ethereum/account/${address}/nfts`, {
       headers: await getHeaders(),
       params: { limit: 50 },
@@ -136,7 +144,7 @@ async function fetchOwnedNFTs(address: string) {
   }
 }
 
-// ====================== NEW: Listing logic (simulation first) ======================
+// ====================== LISTING LOGIC ======================
 async function listOwnedNFTs() {
   if (!WALLET_ADDRESS) {
     log("ERROR", "WALLET_ADDRESS is required for listing");
@@ -144,7 +152,6 @@ async function listOwnedNFTs() {
   }
 
   log("LIST", `Checking NFTs owned by ${WALLET_ADDRESS}...`);
-
   const nfts = await fetchOwnedNFTs(WALLET_ADDRESS);
 
   if (nfts.length === 0) {
@@ -157,110 +164,55 @@ async function listOwnedNFTs() {
   for (const nft of nfts) {
     const collection = nft.collection || "unknown";
     const tokenId = nft.identifier || nft.token_id || "unknown";
+    const contractAddress = nft.contract;
     const name = nft.name || `${collection} #${tokenId}`;
 
-    // Simple first strategy: list at 1.15× floor (you can change this later)
     const floor = await getFloor(collection);
     const listPrice = floor && floor > 0 ? floor * 1.15 : null;
 
-    if (DRY_RUN) {
+    // Safety / Simulation mode
+    if (DRY_RUN || !wallet || !sdk) {
       log("SIMULATION", `Would LIST: ${name}`);
       log("SIMULATION", `Collection : ${collection}`);
       log("SIMULATION", `Token ID   : ${tokenId}`);
       log("SIMULATION", `Floor      : ${floor ? floor.toFixed(4) + " ETH" : "unknown"}`);
       log("SIMULATION", `List price : ${listPrice ? listPrice.toFixed(4) + " ETH" : "could not calculate"}`);
       log("SIMULATION", `----------------------------------------`);
-   } else {
-      if (!wallet) {
-        log("ERROR", `Cannot list ${name}: Private Key or Wallet not ready.`);
-        continue;
-      }
-      if (!listPrice) {
-        log("ERROR", `Skipping listing for ${name}: Could not calculate list price.`);
-        continue;
-      }
+      continue;
+    }
 
-      try {
-        log("LIVE", `Executing live Seaport listing for ${name} at ${listPrice.toFixed(4)} ETH...`);
+    // Real listing
+    if (!listPrice || !contractAddress || tokenId === "unknown") {
+      log("SKIP", `Cannot list ${name}: missing data`);
+      continue;
+    }
 
-        const headers = await getHeaders();
-        const orderParametersResponse = await axios.post(
-          `${OPENSEA_BASE}/orders/ethereum/seaport/listings`,
-          {
-            asset: {
-              token_address: nft.token_address || nft.asset_contract?.address,
-              token_id: tokenId,
-            },
-            quantity: 1,
-            price: ethers.parseEther(listPrice.toFixed(6)).toString(),
-            expiration_time: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
-          },
-          { headers }
-        );
+    try {
+      log("LIVE", `Creating real listing for ${name} at ${listPrice.toFixed(4)} ETH...`);
 
-        const { order_components, order_hash } = orderParametersResponse.data;
+      const expirationTime = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60; // 7 days
 
-        log("LIVE", `Signing order hash: ${order_hash}`);
-        const domain = {
-          name: "Seaport",
-          version: "1.6",
-          chainId: 1,
-          verifyingContract: "0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC",
-        };
+      const listing = await sdk.createListing({
+        asset: {
+          tokenAddress: contractAddress,
+          tokenId: String(tokenId),
+        },
+        accountAddress: WALLET_ADDRESS,
+        amount: listPrice,
+        expirationTime,
+      });
 
-        const types = {
-          OrderComponents: [
-            { name: "offerer", type: "address" },
-            { name: "zone", type: "address" },
-            { name: "offer", type: "OfferItem[]" },
-            { name: "consideration", type: "ConsiderationItem[]" },
-            { name: "orderType", type: "uint8" },
-            { name: "startTime", type: "uint256" },
-            { name: "endTime", type: "uint256" },
-            { name: "zoneHash", type: "bytes32" },
-            { name: "salt", type: "uint256" },
-            { name: "conduitKey", type: "bytes32" },
-            { name: "counter", type: "uint256" },
-          ],
-          OfferItem: [
-            { name: "itemType", type: "uint8" },
-            { name: "token", type: "address" },
-            { name: "identifierOrCriteria", type: "uint256" },
-            { name: "startAmount", type: "uint256" },
-            { name: "endAmount", type: "uint256" },
-          ],
-          ConsiderationItem: [
-            { name: "itemType", type: "uint8" },
-            { name: "token", type: "address" },
-            { name: "identifierOrCriteria", type: "uint256" },
-            { name: "startAmount", type: "uint256" },
-            { name: "endAmount", type: "uint256" },
-            { name: "recipient", type: "address" },
-          ],
-        };
-
-        const signature = await wallet.signTypedData(domain, types, order_components);
-
-        await axios.post(
-          `${OPENSEA_BASE}/orders/ethereum/seaport/listings/submit`,
-          {
-            order_components,
-            signature,
-          },
-          { headers }
-        );
-
-        log("SUCCESS", `🎉 LIVE MARKET listing completed for ${name} at ${listPrice.toFixed(4)} ETH!`);
-           } catch (err: any) {
-        log("ERROR", `Failed live listing sequence for ${name}`, err.response?.data || err.message);
-      }
+      log("SUCCESS", `🎉 LISTED SUCCESSFULLY: ${name}`);
+      log("SUCCESS", `Price: ${listPrice.toFixed(4)} ETH`);
+      console.log("Listing response:", listing);
+    } catch (err: any) {
+      log("ERROR", `Failed to list ${name}: ${err.message}`);
     }
   }
 }
 
 // ====================== CORE (offers) ======================
 async function scanAndEvaluateBids() {
-
   if (!WALLET_ADDRESS) {
     log("ERROR", "WALLET_ADDRESS is required");
     return;
@@ -359,10 +311,11 @@ async function handleBid(bid: any) {
 // ====================== SERVER ======================
 app.get("/health", (_req, res) => {
   res.json({
-    status: "Centaur Agent Claw v2.4",
+    status: "Centaur Agent Claw v2.5",
     dryRun: DRY_RUN,
     wallet: WALLET_ADDRESS || null,
     walletLoaded: !!wallet,
+    sdkReady: !!sdk,
     floorCacheSize: floorCache.size,
   });
 });
@@ -379,18 +332,18 @@ app.get("/list", async (_req, res) => {
 
 app.listen(PORT, () => {
   console.log("-----------------------------------------------");
-  console.log("  CENTAUR AGENT CLAW v2.4");
-  console.log("  + Wallet control + Listing simulation");
+  console.log("  CENTAUR AGENT CLAW v2.5");
+  console.log("  + OpenSea SDK + Real Listing support");
   console.log(`  DRY_RUN     : ${DRY_RUN}`);
   console.log(`  Wallet      : ${WALLET_ADDRESS || "not set"}`);
   console.log(`  Wallet ready: ${wallet ? "YES" : "NO"}`);
+  console.log(`  SDK ready   : ${sdk ? "YES" : "NO"}`);
   console.log(`  Port        : ${PORT}`);
   console.log("-----------------------------------------------");
 
-  // Start both loops
   scanAndEvaluateBids();
   setInterval(scanAndEvaluateBids, SCAN_INTERVAL_MS);
 
-  // Also check owned NFTs every 5 minutes
   listOwnedNFTs();
   setInterval(listOwnedNFTs, 5 * 60 * 1000);
+});
