@@ -10,7 +10,7 @@
     "check": "tsc",
     "db:push": "drizzle-kit push"
   },
-  "dependencies": {"@opensea/sdk": "^0.6.0",
+  "dependencies": {"@opensea/sdk": "^12.9.1",
 "ethers": "^6.13.4",
     "@coinbase/cdp-agentkit-core": "^0.0.14",
     "@coinbase/cdp-langchain": "^0.0.15",
