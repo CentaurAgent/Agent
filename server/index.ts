@@ -179,24 +179,39 @@ async function listOwnedNFTs() {
         log("ERROR", `Skipping listing for ${name}: Could not calculate list price.`);
         continue;
       }
-
       try {
         log("LIVE", `Executing live Seaport listing for ${name} at ${listPrice.toFixed(4)} ETH...`);
 
+        // 1. Request signed order parameters from OpenSea (Corregido con 'parameters')
         const headers = await getHeaders();
         const orderParametersResponse = await axios.post(
           `${OPENSEA_BASE}/orders/ethereum/seaport/listings`,
           {
-            asset: {
-              token_address: nft.token_address || nft.asset_contract?.address,
-              token_id: tokenId,
-            },
-            quantity: 1,
-            price: ethers.parseEther(listPrice.toFixed(6)).toString(),
-            expiration_time: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+            parameters: {
+              offerer: WALLET_ADDRESS,
+              offer: [
+                {
+                  itemType: 2, // ERC721
+                  token: nft.token_address || nft.asset_contract?.address,
+                  identifierOrCriteria: tokenId,
+                  startAmount: ethers.parseEther(listPrice.toFixed(6)).toString(),
+                  endAmount: ethers.parseEther(listPrice.toFixed(6)).toString()
+                }
+              ],
+              consideration: [], 
+              startTime: Math.floor(Date.now() / 1000).toString(),
+              endTime: (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7).toString(), // 7 días
+              orderType: 0, // FULL_OPEN
+              zone: "0x0000000000000000000000000000000000000000",
+              zoneHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+              salt: Math.floor(Math.random() * 1000000).toString(),
+              conduitKey: "0x0000000000000000000000000000000000000000000000000000000000000000",
+              counter: "0"
+            }
           },
           { headers }
         );
+
 
         const { order_components, order_hash } = orderParametersResponse.data;
 
