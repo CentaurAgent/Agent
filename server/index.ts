@@ -182,8 +182,14 @@ async function listOwnedNFTs() {
       try {
         log("LIVE", `Executing live Seaport listing for ${name} at ${listPrice.toFixed(4)} ETH...`);
 
-        // 1. Request signed order parameters from OpenSea (Corregido con 'parameters')
-        const headers = await getHeaders();
+               const headers = await getHeaders();
+        const tokenAddress = nft.token_address || nft.asset_contract?.address || nft.contract;
+        
+        if (!tokenAddress) {
+          log("ERROR", `Skipping ${name}: Could not resolve token address contract property.`);
+          continue;
+        }
+
         const orderParametersResponse = await axios.post(
           `${OPENSEA_BASE}/orders/ethereum/seaport/listings`,
           {
@@ -191,14 +197,23 @@ async function listOwnedNFTs() {
               offerer: WALLET_ADDRESS,
               offer: [
                 {
-                  itemType: 2, // ERC721
-                  token: nft.token_address || nft.asset_contract?.address,
-                  identifierOrCriteria: tokenId,
+                  itemType: 2, // ERC721 Standard
+                  token: tokenAddress,
+                  identifierOrCriteria: tokenId.toString(),
                   startAmount: ethers.parseEther(listPrice.toFixed(6)).toString(),
                   endAmount: ethers.parseEther(listPrice.toFixed(6)).toString()
                 }
               ],
-              consideration: [], 
+              consideration: [
+                {
+                  itemType: 0, 
+                  token: "0x0000000000000000000000000000000000000000",
+                  identifierOrCriteria: "0",
+                  startAmount: "0",
+                  endAmount: "0",
+                  recipient: "0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC"
+                }
+              ],
               startTime: Math.floor(Date.now() / 1000).toString(),
               endTime: (Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7).toString(), // 7 días
               orderType: 0, // FULL_OPEN
@@ -210,6 +225,8 @@ async function listOwnedNFTs() {
             }
           },
           { headers }
+        );
+
         );
 
 
