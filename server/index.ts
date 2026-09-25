@@ -16,7 +16,7 @@ const OUTLIER_MULTIPLIER = parseFloat(process.env.OUTLIER_MULTIPLIER || "3.0");
 const EXTREME_OUTLIER_MULTIPLIER = parseFloat(process.env.EXTREME_OUTLIER_MULTIPLIER || "50");
 const SCAN_INTERVAL_MS = parseInt(process.env.SCAN_INTERVAL_MS || "180000"); // 3 min
 const OPENSEA_BASE = "https://api.opensea.io/api/v2";
-const RPC_URL = process.env.RPC_URL || "https://eth.llamarpc.com";
+const RPC_URL = process.env.RPC_URL || "https://ethereum.publicnode.com";
 
 // ====================== WALLET + SDK ======================
 let wallet: ethers.Wallet | null = null;
@@ -27,7 +27,6 @@ if (PRIVATE_KEY) {
     const provider = new ethers.JsonRpcProvider(RPC_URL);
     wallet = new ethers.Wallet(PRIVATE_KEY, provider);
 
-    // Force type to avoid TypeScript error
     sdk = new OpenSeaSDK(wallet as any, {
       chain: Chain.Mainnet,
       apiKey: OPENSEA_API_KEY || undefined,
@@ -55,7 +54,7 @@ function log(level: string, msg: string, data?: any) {
 async function getHeaders() {
   const headers: any = {
     accept: "application/json",
-    "User-Agent": "Centaur-Agent-Claw/2.5",
+    "User-Agent": "Centaur-Agent-Claw/2.6",
   };
   if (OPENSEA_API_KEY) headers["x-api-key"] = OPENSEA_API_KEY;
   return headers;
@@ -168,15 +167,20 @@ async function listOwnedNFTs() {
     const name = nft.name || `${collection} #${tokenId}`;
 
     const floor = await getFloor(collection);
-    const listPrice = floor && floor > 0 ? floor * 1.15 : null;
+
+    // Fix decimal precision issue
+    let listPrice: number | null = null;
+    if (floor && floor > 0) {
+      listPrice = Number((floor * 1.15).toFixed(6)); // max 6 decimals
+    }
 
     // Safety / Simulation mode
     if (DRY_RUN || !wallet || !sdk) {
       log("SIMULATION", `Would LIST: ${name}`);
       log("SIMULATION", `Collection : ${collection}`);
       log("SIMULATION", `Token ID   : ${tokenId}`);
-      log("SIMULATION", `Floor      : ${floor ? floor.toFixed(4) + " ETH" : "unknown"}`);
-      log("SIMULATION", `List price : ${listPrice ? listPrice.toFixed(4) + " ETH" : "could not calculate"}`);
+      log("SIMULATION", `Floor      : ${floor ? floor.toFixed(6) + " ETH" : "unknown"}`);
+      log("SIMULATION", `List price : ${listPrice ? listPrice.toFixed(6) + " ETH" : "could not calculate"}`);
       log("SIMULATION", `----------------------------------------`);
       continue;
     }
@@ -188,7 +192,7 @@ async function listOwnedNFTs() {
     }
 
     try {
-      log("LIVE", `Creating real listing for ${name} at ${listPrice.toFixed(4)} ETH...`);
+      log("LIVE", `Creating real listing for ${name} at ${listPrice.toFixed(6)} ETH...`);
 
       const expirationTime = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60; // 7 days
 
@@ -203,7 +207,7 @@ async function listOwnedNFTs() {
       });
 
       log("SUCCESS", `🎉 LISTED SUCCESSFULLY: ${name}`);
-      log("SUCCESS", `Price: ${listPrice.toFixed(4)} ETH`);
+      log("SUCCESS", `Price: ${listPrice.toFixed(6)} ETH`);
       console.log("Listing response:", listing);
     } catch (err: any) {
       log("ERROR", `Failed to list ${name}: ${err.message}`);
@@ -311,7 +315,7 @@ async function handleBid(bid: any) {
 // ====================== SERVER ======================
 app.get("/health", (_req, res) => {
   res.json({
-    status: "Centaur Agent Claw v2.5",
+    status: "Centaur Agent Claw v2.6",
     dryRun: DRY_RUN,
     wallet: WALLET_ADDRESS || null,
     walletLoaded: !!wallet,
@@ -332,8 +336,8 @@ app.get("/list", async (_req, res) => {
 
 app.listen(PORT, () => {
   console.log("-----------------------------------------------");
-  console.log("  CENTAUR AGENT CLAW v2.5");
-  console.log("  + OpenSea SDK + Real Listing support");
+  console.log("  CENTAUR AGENT CLAW v2.6");
+  console.log("  + Fixed decimal precision");
   console.log(`  DRY_RUN     : ${DRY_RUN}`);
   console.log(`  Wallet      : ${WALLET_ADDRESS || "not set"}`);
   console.log(`  Wallet ready: ${wallet ? "YES" : "NO"}`);
